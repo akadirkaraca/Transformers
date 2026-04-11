@@ -86,7 +86,8 @@ def main():
     set_seed(cfg.training.seed)
     arch = cfg.model.architecture
 
-    # Validate positional encoding capacity for decoder_only
+    # Validate positional encoding capacity — must hold for all architectures.
+    # The same PE buffer is shared by encoder and decoder in encoder_decoder models.
     if arch == "decoder_only":
         combined_len = cfg.data.max_input_len + cfg.data.max_output_len
         if combined_len > cfg.model.max_seq_len:
@@ -95,6 +96,19 @@ def main():
                 f"max_output_len ({cfg.data.max_output_len}) = {combined_len} "
                 f"exceeds model.max_seq_len ({cfg.model.max_seq_len}). "
                 "Increase model.max_seq_len in base.yaml."
+            )
+    else:
+        if cfg.data.max_input_len > cfg.model.max_seq_len:
+            raise ValueError(
+                f"{arch}: data.max_input_len ({cfg.data.max_input_len}) exceeds "
+                f"model.max_seq_len ({cfg.model.max_seq_len}). "
+                "Set model.max_seq_len >= data.max_input_len in base.yaml."
+            )
+        if cfg.data.max_output_len > cfg.model.max_seq_len:
+            raise ValueError(
+                f"{arch}: data.max_output_len ({cfg.data.max_output_len}) exceeds "
+                f"model.max_seq_len ({cfg.model.max_seq_len}). "
+                "Set model.max_seq_len >= data.max_output_len in base.yaml."
             )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
