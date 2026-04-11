@@ -9,6 +9,7 @@ CLAUDE.md
 
 # Dataset files — only empty templates (data/data.csv, data/data.jsonl) are tracked
 data/*.csv
+data/MLSUM
 !data/data.csv
 data/*.jsonl
 !data/data.jsonl
