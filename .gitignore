@@ -1,0 +1,25 @@
+.env
+*.pt
+runs/
+configs/tmp_launch_*.yaml
+__pycache__/
+*.pyc
+.venv/
+CLAUDE.md
+
+# Dataset files — only empty templates (data/data.csv, data/data.jsonl) are tracked
+data/*.csv
+!data/data.csv
+data/*.jsonl
+!data/data.jsonl
+
+# Model checkpoints
+checkpoints/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Claude Code session plans
+plans/
