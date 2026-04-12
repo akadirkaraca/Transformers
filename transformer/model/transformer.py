@@ -33,6 +33,7 @@ class Transformer(nn.Module):
         weight_tying: bool = True,
         encoder_activation: str = "relu",
         decoder_activation: str = "relu",
+        attn_impl: str = "manual",
     ):
         super().__init__()
         self.d_model = d_model
@@ -42,8 +43,8 @@ class Transformer(nn.Module):
         self.embedding = TokenEmbedding(vocab_size, d_model, pad_id)
         self.pos_enc = PositionalEncoding(d_model, max_seq_len, dropout)
 
-        self.encoder = Encoder(num_encoder_layers, d_model, num_heads, d_ff, dropout, encoder_activation)
-        self.decoder = Decoder(num_decoder_layers, d_model, num_heads, d_ff, dropout, decoder_activation)
+        self.encoder = Encoder(num_encoder_layers, d_model, num_heads, d_ff, dropout, encoder_activation, attn_impl)
+        self.decoder = Decoder(num_decoder_layers, d_model, num_heads, d_ff, dropout, decoder_activation, attn_impl)
 
         # Output projection: (B, T, d_model) → (B, T, vocab_size)
         self.output_proj = nn.Linear(d_model, vocab_size, bias=False)
@@ -131,4 +132,5 @@ def build_transformer_from_config(cfg) -> Transformer:
         weight_tying=cfg.model.weight_tying,
         encoder_activation=cfg.model.encoder_activation,
         decoder_activation=cfg.model.decoder_activation,
+        attn_impl=cfg.model.attn_impl,
     )

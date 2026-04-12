@@ -20,6 +20,7 @@ class ModelConfig:
     encoder_activation: str = "relu"   # FFN activation in encoder: "relu" | "gelu" | "silu"
     decoder_activation: str = "relu"   # FFN activation in decoder: "relu" | "gelu" | "silu"
     architecture: str = "encoder_decoder"  # "encoder_decoder" | "encoder_only" | "decoder_only"
+    attn_impl: str = "manual"          # attention backend: "manual" | "sdpa"
 
 
 @dataclass

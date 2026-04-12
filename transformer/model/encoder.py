@@ -15,10 +15,10 @@ class EncoderLayer(nn.Module):
 
     def __init__(
         self, d_model: int, num_heads: int, d_ff: int, dropout: float = 0.1,
-        activation: str = "relu",
+        activation: str = "relu", attn_impl: str = "manual",
     ):
         super().__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout, is_causal=False)
+        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout, is_causal=False, attn_impl=attn_impl)
         self.ffn = PositionwiseFeedForward(d_model, d_ff, dropout, activation)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -37,11 +37,11 @@ class Encoder(nn.Module):
 
     def __init__(
         self, num_layers: int, d_model: int, num_heads: int, d_ff: int,
-        dropout: float = 0.1, activation: str = "relu",
+        dropout: float = 0.1, activation: str = "relu", attn_impl: str = "manual",
     ):
         super().__init__()
         self.layers = nn.ModuleList(
-            [EncoderLayer(d_model, num_heads, d_ff, dropout, activation) for _ in range(num_layers)]
+            [EncoderLayer(d_model, num_heads, d_ff, dropout, activation, attn_impl) for _ in range(num_layers)]
         )
         self.norm = nn.LayerNorm(d_model)
 
