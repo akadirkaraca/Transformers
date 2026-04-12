@@ -44,6 +44,16 @@ class SentencePieceTokenizer(TokenizerBase):
             ids = [i for i in ids if i not in special]
         return self._sp.decode(ids)
 
+    # ---- Vocabulary introspection ----
+
+    def id_to_piece(self, token_id: int) -> str:
+        """Return the string piece for a given token ID."""
+        return self._sp.IdToPiece(token_id)
+
+    def get_score(self, token_id: int) -> float:
+        """Return the log-probability score assigned to a piece during BPE training."""
+        return self._sp.GetScore(token_id)
+
     # ---- Persistence ----
 
     def save(self, path: str | Path) -> None:
