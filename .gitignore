@@ -14,6 +14,11 @@ data/MLSUM
 data/*.jsonl
 !data/data.jsonl
 
+tokenizer/*.model
+tokenizer/*.vocab
+!tokenizer/tokenizer.model
+!tokenizer/tokenizer.vocab
+
 # Model checkpoints
 checkpoints/
 
