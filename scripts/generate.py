@@ -69,6 +69,8 @@ def main():
     state = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(state["model_state_dict"])
     model.to(device).eval()
+    if cfg.inference.torch_compile == "graph":
+        model = torch.compile(model)
     print(f"Loaded checkpoint: {args.checkpoint}")
 
     if args.input:

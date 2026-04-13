@@ -57,6 +57,7 @@ class TrainingConfig:
     run_name: str = ""         # auto-generated from config if empty
     mlm_probability: float = 0.15   # fraction of tokens masked (encoder_only)
     mask_id: int = 1                # token id used as [MASK]; defaults to unk_id
+    torch_compile: str = "eager"    # "eager" | "graph"
 
 
 @dataclass
@@ -81,6 +82,7 @@ class InferenceConfig:
     max_decode_len: int = 64
     min_decode_len: int = 3
     checkpoint_path: str = ""
+    torch_compile: str = "eager"    # "eager" | "graph"
 
 
 @dataclass

@@ -210,6 +210,12 @@ def main():
         architecture=arch,
     )
 
+    if cfg.training.torch_compile == "graph":
+        trainer.model = torch.compile(trainer.model)
+        _console.print("[dim]compile     :[/] [cyan]graph (torch.compile)[/]")
+    else:
+        _console.print("[dim]compile     :[/] [dim]eager[/]")
+
     start_epoch = 0
     if args.resume:
         start_epoch = trainer.load_checkpoint(args.resume)
