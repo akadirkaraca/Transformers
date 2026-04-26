@@ -23,6 +23,7 @@ from transformer.config.config import load_config
 from transformer.data.preprocessing import preprocess_article
 from transformer.model.decoder_only import build_decoder_only_from_config
 from transformer.tokenizer.sentencepiece_tokenizer import SentencePieceTokenizer
+from transformer.training.trainer import load_model_weights
 
 
 def generate_headline(
@@ -82,13 +83,15 @@ def main():
     tokenizer = SentencePieceTokenizer.load(cfg.tokenizer.model_path)
 
     model = build_decoder_only_from_config(cfg)
-    state = torch.load(args.checkpoint, map_location=device)
-    saved_arch = state.get("architecture", "decoder_only")
-    if saved_arch != "decoder_only":
-        raise ValueError(
-            f"Checkpoint was saved with architecture={saved_arch!r}, not decoder_only."
-        )
-    model.load_state_dict(state["model_state_dict"])
+    state = load_model_weights(args.checkpoint, model, device)
+    # For .ckpt/.pt checkpoints, validate the saved architecture matches.
+    # .safetensors files carry weights only; trust the config check above.
+    if state is not None:
+        saved_arch = state.get("architecture", "decoder_only")
+        if saved_arch != "decoder_only":
+            raise ValueError(
+                f"Checkpoint was saved with architecture={saved_arch!r}, not decoder_only."
+            )
     model.to(device).eval()
     print(f"Loaded checkpoint: {args.checkpoint}")
 

@@ -200,6 +200,7 @@ def main():
         amp=cfg.training.amp,
         save_top_k=cfg.training.save_top_k,
         checkpoint_dir=checkpoint_dir,
+        checkpoint_formats=cfg.checkpoint.formats,
         log_every=cfg.training.log_every,
         log_dir=log_dir,
         early_stopping_patience=cfg.training.early_stopping_patience,

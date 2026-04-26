@@ -20,12 +20,44 @@ dependencies = [
     "tensorboard>=2.13",
     "rich>=13.0",
     "python-dotenv>=1.0",
+    "safetensors>=0.4",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "ruff>=0.1",
+]
+# Export backends — install only what you need:
+#   uv pip install "transformer[export-onnx]"
+#   uv pip install "transformer[export-tf]"
+#   uv pip install "transformer[export-coreml]"
+#   uv pip install "transformer[export-jax]"
+#   uv pip install "transformer[export]"     # all at once
+export-onnx = [
+    "onnx>=1.14",
+    "onnxruntime>=1.16",
+]
+export-tf = [
+    "onnx>=1.14",
+    "onnx-tf>=1.10",
+    "tensorflow>=2.12",
+]
+export-coreml = [
+    "coremltools>=7.0",
+]
+export-jax = [
+    "jax>=0.4",
+    "flax>=0.7",
+]
+export = [
+    "onnx>=1.14",
+    "onnxruntime>=1.16",
+    "onnx-tf>=1.10",
+    "tensorflow>=2.12",
+    "coremltools>=7.0",
+    "jax>=0.4",
+    "flax>=0.7",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -15,6 +15,7 @@ from transformer.evaluation.metrics import compute_bleu, compute_rouge
 from transformer.inference.beam_search import beam_search_decode
 from transformer.model import build_model
 from transformer.tokenizer.sentencepiece_tokenizer import SentencePieceTokenizer
+from transformer.training.trainer import load_model_weights
 
 
 def main():
@@ -52,8 +53,7 @@ def main():
     dl = test_dl if args.split == "test" else val_dl
 
     model = build_model(cfg.model.architecture, cfg)
-    state = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(state["model_state_dict"])
+    load_model_weights(args.checkpoint, model, device)
     model.to(device).eval()
     if cfg.inference.torch_compile == "graph":
         model = torch.compile(model)

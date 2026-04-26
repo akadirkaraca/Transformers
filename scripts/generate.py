@@ -21,6 +21,7 @@ from transformer.data.preprocessing import preprocess_article
 from transformer.inference.beam_search import beam_search_decode
 from transformer.model.transformer import build_transformer_from_config
 from transformer.tokenizer.sentencepiece_tokenizer import SentencePieceTokenizer
+from transformer.training.trainer import load_model_weights
 
 
 def generate_headline(
@@ -66,8 +67,7 @@ def main():
     tokenizer = SentencePieceTokenizer.load(cfg.tokenizer.model_path)
 
     model = build_transformer_from_config(cfg)
-    state = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(state["model_state_dict"])
+    load_model_weights(args.checkpoint, model, device)
     model.to(device).eval()
     if cfg.inference.torch_compile == "graph":
         model = torch.compile(model)

@@ -63,3 +63,10 @@ inference:
   max_decode_len: 84
   min_decode_len: 3
   torch_compile: "eager"   # "eager" | "graph"
+
+checkpoint:
+  formats: [ckpt, safetensors]
+  # Formats saved at each checkpoint during training:
+  #   ckpt         → full training state (model + optimizer + scheduler + metadata), resumable
+  #   safetensors  → model weights only (no pickle, memory-mapped, for inference/sharing)
+  #   pt           → legacy PyTorch format (same content as ckpt, kept for compatibility)

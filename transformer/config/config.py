@@ -86,12 +86,22 @@ class InferenceConfig:
 
 
 @dataclass
+class CheckpointConfig:
+    formats: list = field(default_factory=lambda: ["ckpt", "safetensors"])
+    # Formats saved at each training checkpoint:
+    #   "ckpt"        - full training state (model + optimizer + scheduler + metadata), resumable
+    #   "safetensors" - model weights only (no pickle, memory-mapped, for inference/sharing)
+    #   "pt"          - legacy PyTorch format (same content as ckpt)
+
+
+@dataclass
 class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     tokenizer: TokenizerConfig = field(default_factory=TokenizerConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     data: DataConfig = field(default_factory=DataConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
+    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
 
 
 def _merge(dataclass_instance, d: dict):

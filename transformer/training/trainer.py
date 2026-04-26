@@ -13,6 +13,14 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+
+try:
+    from safetensors.torch import save_file as _st_save, load_file as _st_load
+    _SAFETENSORS_AVAILABLE = True
+except ImportError:
+    _SAFETENSORS_AVAILABLE = False
+
+_FULL_STATE_FORMATS = {"ckpt", "pt"}  # formats that carry optimizer + scheduler state
 from torch.utils.tensorboard import SummaryWriter
 from rich.console import Console
 from rich.progress import (
@@ -71,6 +79,7 @@ class Trainer:
         amp: bool = True,
         save_top_k: int = 3,
         checkpoint_dir: str = "checkpoints",
+        checkpoint_formats: Optional[list] = None,
         log_every: int = 100,
         log_dir: str = "runs",
         early_stopping_patience: int = 0,
@@ -90,6 +99,7 @@ class Trainer:
         self.amp = amp and device.type == "cuda"
         self.save_top_k = save_top_k
         self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_formats = checkpoint_formats or ["ckpt"]
         self.log_every = log_every
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
@@ -368,8 +378,8 @@ class Trainer:
     # ------------------------------------------------------------------ #
 
     def _save_checkpoint(self, epoch: int, val_loss: float):
-        fname = self.checkpoint_dir / f"checkpoint_epoch{epoch:03d}.pt"
-        state = {
+        stem = f"checkpoint_epoch{epoch:03d}"
+        full_state = {
             "epoch": epoch,
             "val_loss": val_loss,
             "architecture": self.architecture,
@@ -378,21 +388,46 @@ class Trainer:
             "scheduler_state_dict": self.scheduler.state_dict(),
             "global_step": self.global_step,
         }
-        torch.save(state, fname)
 
-        # Use negated val_loss so heappop removes the worst checkpoint (highest loss),
-        # not the best. Python's heapq is a min-heap, so min(-val_loss) = max(val_loss).
-        heapq.heappush(self._heap, (-val_loss, str(fname)))
+        saved = []
+        for fmt in self.checkpoint_formats:
+            if fmt in _FULL_STATE_FORMATS:
+                path = self.checkpoint_dir / f"{stem}.{fmt}"
+                torch.save(full_state, path)
+                saved.append(path.name)
+            elif fmt == "safetensors":
+                if not _SAFETENSORS_AVAILABLE:
+                    _console.print("[yellow]  safetensors not installed, skipping .safetensors[/]")
+                    continue
+                path = self.checkpoint_dir / f"{stem}.safetensors"
+                _st_save(self.model.state_dict(), str(path))
+                saved.append(path.name)
+
+        # Track by stem so top-K cleanup removes all format variants together.
+        # Negate val_loss so heappop evicts the worst (highest-loss) checkpoint.
+        heapq.heappush(self._heap, (-val_loss, stem))
         while len(self._heap) > self.save_top_k:
-            _, old_path = heapq.heappop(self._heap)
-            if os.path.exists(old_path):
-                os.remove(old_path)
-                _console.print(f"  [dim]removed: {old_path}[/]")
+            _, old_stem = heapq.heappop(self._heap)
+            for fmt in ("ckpt", "pt", "safetensors"):
+                old_path = self.checkpoint_dir / f"{old_stem}.{fmt}"
+                if old_path.exists():
+                    old_path.unlink()
+            _console.print(f"  [dim]removed: {old_stem}.*[/]")
 
-        _console.print(f"  [dim]✓ {fname.name}  val_loss={val_loss:.4f}[/]")
+        _console.print(
+            f"  [dim]✓ {stem}  val_loss={val_loss:.4f}  "
+            f"saved=[{', '.join(saved)}][/]"
+        )
 
     def load_checkpoint(self, checkpoint_path: str):
-        state = torch.load(checkpoint_path, map_location=self.device)
+        p = Path(checkpoint_path)
+        if p.suffix == ".safetensors":
+            raise ValueError(
+                f"{checkpoint_path!r} is a weights-only .safetensors file and cannot be "
+                "used to resume training (no optimizer/scheduler state). "
+                "Pass a .ckpt or .pt checkpoint instead."
+            )
+        state = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         saved_arch = state.get("architecture", "encoder_decoder")
         if saved_arch != self.architecture:
             raise ValueError(
@@ -406,3 +441,29 @@ class Trainer:
         self.global_step = state.get("global_step", 0)
         _console.print(f"[dim]Loaded: {checkpoint_path}  (epoch={state['epoch']})[/]")
         return state["epoch"]
+
+
+def load_model_weights(path: str, model: nn.Module, device: torch.device) -> Optional[dict]:
+    """Load model weights for inference from .ckpt, .pt, or .safetensors.
+
+    Returns the full state dict for .ckpt/.pt files (so callers can read
+    metadata such as ``architecture`` or ``epoch``), or ``None`` for
+    .safetensors files which carry weights only.
+
+    For training resumption use ``Trainer.load_checkpoint()`` — it also
+    restores optimizer and scheduler state.
+    """
+    p = Path(path)
+    if p.suffix == ".safetensors":
+        if not _SAFETENSORS_AVAILABLE:
+            raise ImportError(
+                "safetensors package is required to load .safetensors files.\n"
+                "  uv pip install safetensors"
+            )
+        state_dict = _st_load(str(p), device=str(device))
+        model.load_state_dict(state_dict)
+        return None
+    else:
+        state = torch.load(path, map_location=device, weights_only=False)
+        model.load_state_dict(state["model_state_dict"])
+        return state
