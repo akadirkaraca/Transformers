@@ -22,6 +22,9 @@ tokenizer/*.vocab
 # Model checkpoints
 checkpoints/
 
+# Downloaded model files / weights
+downloads/
+
 # Tool caches
 .ruff_cache/
 .pytest_cache/
