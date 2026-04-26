@@ -21,6 +21,8 @@ A general-purpose LLM training framework built on PyTorch. Supports encoder-deco
 - BLEU-1..4 and ROUGE-1/2/L evaluation
 - TensorBoard logging, top-K checkpoint saving, early stopping
 - Telegram training notifications (optional)
+- Multi-format checkpointing: `.ckpt` (full training state) + `.safetensors` (weights-only, no pickle)
+- Multi-framework export: safetensors (HF-compatible), ONNX, TorchScript, TensorFlow, TFLite, TF checkpoint, JAX/NumPy, Core ML
 
 ---
 
@@ -104,11 +106,11 @@ uv run python scripts/build_tokenizer.py --config configs/base.yaml
 uv run python scripts/train.py --config configs/base.yaml
 ```
 
-Resume from a checkpoint:
+Resume from a checkpoint (requires a `.ckpt` or `.pt` file — full training state):
 
 ```bash
 uv run python scripts/train.py --config configs/base.yaml \
-    --resume checkpoints/checkpoint_epoch005.pt
+    --resume checkpoints/run_name/checkpoint_epoch005.ckpt
 ```
 
 Load a custom architecture module before training:
@@ -120,11 +122,12 @@ uv run python scripts/train.py --config configs/base.yaml \
 
 ### 5. Evaluate
 
-BLEU and ROUGE evaluation on the test split (encoder_decoder only):
+BLEU and ROUGE evaluation on the test split (encoder_decoder only).
+Accepts `.ckpt`, `.pt`, or `.safetensors` checkpoints:
 
 ```bash
 uv run python scripts/evaluate.py --config configs/base.yaml \
-    --checkpoint checkpoints/checkpoint_epoch010.pt
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt
 ```
 
 ### 6. Generate
@@ -134,11 +137,11 @@ uv run python scripts/evaluate.py --config configs/base.yaml \
 ```bash
 # Interactive
 uv run python scripts/generate.py --config configs/base.yaml \
-    --checkpoint checkpoints/checkpoint_epoch010.pt
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt
 
 # Batch (one input per line)
 uv run python scripts/generate.py --config configs/base.yaml \
-    --checkpoint checkpoints/checkpoint_epoch010.pt \
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt \
     --input inputs.txt --output outputs.txt
 ```
 
@@ -147,13 +150,36 @@ uv run python scripts/generate.py --config configs/base.yaml \
 ```bash
 # Interactive
 uv run python scripts/causal_generate.py --config configs/base.yaml \
-    --checkpoint checkpoints/checkpoint_epoch010.pt
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt
 
 # Batch
 uv run python scripts/causal_generate.py --config configs/base.yaml \
-    --checkpoint checkpoints/checkpoint_epoch010.pt \
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt \
     --input prompts.txt --output completions.txt
 ```
+
+### 7. Export
+
+Convert a checkpoint to a deployment format:
+
+```bash
+# HuggingFace-compatible safetensors directory
+uv run python scripts/export.py --config configs/base.yaml \
+    --checkpoint checkpoints/run_name/checkpoint_epoch010.ckpt \
+    --format safetensors
+
+# ONNX graph
+uv run python scripts/export.py ... --format onnx
+
+# Multiple formats in one run
+uv run python scripts/export.py ... --format onnx,torchscript,safetensors
+
+# Try all formats (skips any with missing optional dependencies)
+uv run python scripts/export.py ... --format all --output-dir exports
+```
+
+Each format is written to its own sub-directory under `--output-dir` (default: `exports/`).
+See the [Checkpoint & Export](#checkpoint--export) section for available formats and install instructions.
 
 ---
 
@@ -339,6 +365,178 @@ All hyperparameters are set in `configs/base.yaml`. Values shown are the current
 | `max_decode_len` | `64` | Maximum tokens to generate |
 | `min_decode_len` | `3` | EOS is suppressed below this length |
 
+### checkpoint
+
+Controls which file formats are written to disk after each training epoch.
+
+| Key | Default | Description |
+|---|---|---|
+| `formats` | `[ckpt, safetensors]` | List of formats to save at each checkpoint |
+
+Available format values:
+
+| Value | Extension | Contents | Use case |
+|---|---|---|---|
+| `ckpt` | `.ckpt` | Model weights + optimizer + scheduler + metadata | Resume training, full recovery |
+| `safetensors` | `.safetensors` | Model weights only (no pickle) | Inference, sharing, HF Hub |
+| `pt` | `.pt` | Same as `ckpt` (legacy name) | Backwards compatibility |
+
+**Examples:**
+
+Save only the full-state checkpoint (smallest disk footprint):
+```yaml
+checkpoint:
+  formats: [ckpt]
+```
+
+Save both formats (default — recommended):
+```yaml
+checkpoint:
+  formats: [ckpt, safetensors]
+```
+
+Save only model weights for pure inference deployments:
+```yaml
+checkpoint:
+  formats: [safetensors]
+  # Note: you cannot resume training from a .safetensors file.
+```
+
+The `save_top_k` setting under `training` applies across all formats together —
+when a checkpoint is evicted, all of its format variants are deleted.
+
+---
+
+## Checkpoint & Export
+
+### Checkpoint file types
+
+After each epoch the trainer writes one file per configured format into
+`checkpoints/<run_name>/`. At most `save_top_k` epoch checkpoints are kept
+(worst validation-loss checkpoint is removed first):
+
+```
+checkpoints/
+└── encdec_d512_L4_adamw_do20/
+    ├── checkpoint_epoch008.ckpt         # full training state — resumable
+    ├── checkpoint_epoch008.safetensors  # model weights only
+    ├── checkpoint_epoch012.ckpt
+    ├── checkpoint_epoch012.safetensors
+    ├── checkpoint_epoch015.ckpt
+    └── checkpoint_epoch015.safetensors
+```
+
+**Resuming training** always requires a `.ckpt` or `.pt` file:
+
+```bash
+uv run python scripts/train.py --config configs/base.yaml \
+    --resume checkpoints/run_name/checkpoint_epoch012.ckpt
+```
+
+**Loading for inference** (`evaluate.py`, `generate.py`, `causal_generate.py`)
+accepts any format:
+
+```bash
+# From a full-state checkpoint
+--checkpoint checkpoints/run_name/checkpoint_epoch015.ckpt
+
+# From a weights-only safetensors file
+--checkpoint checkpoints/run_name/checkpoint_epoch015.safetensors
+```
+
+### Export to deployment formats
+
+`scripts/export.py` converts any checkpoint into one or more framework-specific
+formats. All exports run on CPU for portability.
+
+```bash
+uv run python scripts/export.py \
+    --config  configs/base.yaml \
+    --checkpoint checkpoints/run_name/checkpoint_epoch015.ckpt \
+    --format  <format> \
+    --output-dir exports          # default
+```
+
+| `--format` | Output path | Contents | Extra install |
+|---|---|---|---|
+| `safetensors` | `exports/safetensors/` | HF-compatible dir: `model.safetensors` + config/tokenizer JSONs | *(core dep)* |
+| `onnx` | `exports/onnx/model.onnx` | ONNX graph, opset 17, dynamic axes | `onnx onnxruntime` |
+| `torchscript` | `exports/torchscript/model.pt` | TorchScript traced model | *(built-in)* |
+| `tensorflow` | `exports/tensorflow/saved_model/` | TF SavedModel via ONNX→onnx-tf | `onnx onnx-tf tensorflow` |
+| `tflite` | `exports/tflite/model.tflite` | TFLite flatbuffer | `onnx onnx-tf tensorflow` |
+| `tf_ckpt` | `exports/tf_ckpt/` | TF Variables checkpoint | `onnx onnx-tf tensorflow` |
+| `jax` | `exports/jax/weights.npz` + `metadata.json` | NumPy arrays for Flax/Haiku | *(numpy, built-in)* |
+| `coreml` | `exports/coreml/model.mlpackage` | Core ML package | `coremltools` (macOS) |
+
+Install optional dependencies for the formats you need:
+
+```bash
+uv pip install onnx onnxruntime                   # onnx
+uv pip install onnx onnx-tf tensorflow            # tensorflow / tflite / tf_ckpt
+uv pip install coremltools                        # coreml
+# jax format requires no extra packages
+
+# Or install everything at once:
+uv pip install "transformer[export]"
+```
+
+**safetensors directory layout** (HuggingFace Hub-compatible):
+
+```
+exports/safetensors/
+├── model.safetensors       # model weights, no pickle
+├── config.json             # architecture + vocab config
+├── generation_config.json  # beam size, length penalty, token IDs
+├── tokenizer_config.json   # special token names, max length
+├── special_tokens_map.json # BOS / EOS / PAD / UNK token strings
+└── bpe32k.model            # SentencePiece tokenizer model file
+```
+
+**JAX weights layout:**
+
+```
+exports/jax/
+├── weights.npz     # np.load(..., allow_pickle=False) → dict keyed by state_dict names
+└── metadata.json   # tensor list + loading note
+```
+
+Load in JAX/Flax:
+```python
+import numpy as np
+weights = dict(np.load("exports/jax/weights.npz", allow_pickle=False))
+# weights["encoder.layers.0.self_attn.q_proj.weight"] → np.ndarray
+```
+
+**Running multiple formats at once:**
+
+```bash
+# Specific formats
+uv run python scripts/export.py \
+    --config configs/base.yaml \
+    --checkpoint checkpoints/run_name/checkpoint_epoch015.ckpt \
+    --format onnx,torchscript,safetensors
+
+# All formats — formats with missing dependencies are skipped, not fatal
+uv run python scripts/export.py \
+    --config configs/base.yaml \
+    --checkpoint checkpoints/run_name/checkpoint_epoch015.ckpt \
+    --format all
+```
+
+Example summary output:
+
+```
+── Summary
+  ✓  safetensors      ok
+  ✓  onnx             ok
+  ✓  torchscript      ok
+  ○  tensorflow       skipped
+  ○  tflite           skipped
+  ○  tf_ckpt          skipped
+  ✓  jax              ok
+  ○  coreml           skipped
+```
+
 ---
 
 ## Project Structure
@@ -364,6 +562,7 @@ scripts/
 ├── evaluate.py           # BLEU/ROUGE evaluation on test split (encoder_decoder)
 ├── generate.py           # Interactive/batch generation — encoder_decoder (beam search)
 ├── causal_generate.py    # Interactive/batch generation — decoder_only (greedy)
+├── export.py             # Export checkpoint to safetensors/ONNX/TF/TFLite/JAX/CoreML/…
 ├── clean_data.py         # Optional data cleaning pipeline
 └── bot_launcher.py       # Telegram bot for remote training monitoring
 
